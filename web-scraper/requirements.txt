@@ -1,0 +1,6 @@
+dotenv
+selenium
+os
+re
+supabase
+bs4
