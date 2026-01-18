@@ -1,0 +1,7 @@
+python-dotenv
+selenium
+supabase
+requests
+sentence_transformers
+pandas
+datasets
