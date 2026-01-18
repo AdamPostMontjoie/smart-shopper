@@ -2,37 +2,33 @@ name: Weekly Scraper
 
 on:
   schedule:
-    # Runs at 8:00 AM UTC every 
+    # Runs at 8:00 AM UTC every Sunday
     - cron: '0 13 * * 0'
-  workflow_dispatch: # Allows manual testing
+  workflow_dispatch: # Manual run button
   push:
     branches:
       - master
 
 jobs:
-  scrape:
+  scrape-with-docker:
     runs-on: ubuntu-latest
     
-    # CRITICAL: This tells GitHub to run all steps inside the 'web-scraper' folder
-    defaults:
-      run:
-        working-directory: ./web-scraper
-
+    # We don't need 'defaults' anymore because Docker handles the path
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12' 
+      # Step 1: Build the "Slim" Image using your Dockerfile
+      # This reads web-scraper/Dockerfile and installs the lightweight libraries
+      - name: Build Scraper Image
+        run: |
+          cd web-scraper
+          docker build -t scraper-image .
 
-      - name: Install dependencies
-        # This works now because of the working-directory default above
-        run: pip install -r requirements.txt
-
-      - name: Run Scraper
-        env:
-          # Add these secrets in your GitHub Repo Settings -> Secrets and variables
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python basket.py
+      # Step 2: Run the container
+      # We pass the secrets into the container using -e
+      - name: Run Scraper Container
+        run: |
+          docker run --rm \
+          -e SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+          -e SUPABASE_KEY="${{ secrets.SUPABASE_KEY }}" \
+          scraper-image
