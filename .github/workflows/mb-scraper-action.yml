@@ -1,0 +1,38 @@
+name: Weekly Scraper
+
+on:
+  schedule:
+    # Runs at 8:00 AM UTC every 
+    - cron: '0 13 * * 0'
+  workflow_dispatch: # Allows manual testing
+  push:
+    branches:
+      - master
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    # CRITICAL: This tells GitHub to run all steps inside the 'web-scraper' folder
+    defaults:
+      run:
+        working-directory: ./web-scraper
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12' 
+
+      - name: Install dependencies
+        # This works now because of the working-directory default above
+        run: pip install -r requirements.txt
+
+      - name: Run Scraper
+        env:
+          # Add these secrets in your GitHub Repo Settings -> Secrets and variables
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python basket.py

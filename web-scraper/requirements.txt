@@ -1,6 +1,6 @@
-dotenv
+python-dotenv
 selenium
-os
-re
 supabase
-bs4
+beautifulsoup4
+webdriver-manager
+requests
