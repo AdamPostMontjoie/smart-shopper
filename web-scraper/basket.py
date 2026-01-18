@@ -55,10 +55,11 @@ def get_dynamic_schedule():
             
     
             time.sleep(3) 
-
-            while True:
+            click_counter = 0;
+            while True and click_counter < 20:
                 try:
                     #click load more button
+                    click_counter += 1
                     load_more_btn = WebDriverWait(driver, 2).until(
                         EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "Load More"))
                     )
