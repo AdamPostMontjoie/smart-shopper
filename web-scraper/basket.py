@@ -22,7 +22,12 @@ supabase: Client = create_client(url, key)
 
 def get_dynamic_schedule():
     options = webdriver.ChromeOptions()
-    # options.add_argument('--headless') # Keep browser visible for now
+    
+    options.add_argument('--headless=new') # Use the new headless mode (more stable)
+    options.add_argument('--no-sandbox') # Bypass OS security model (required for Docker/CI)
+    options.add_argument('--disable-dev-shm-usage') # Overcome limited resource problems
+    options.add_argument('--disable-gpu') # Applicable to windows os only but good practice
+    options.add_argument('--window-size=1920,1080') # Prevent elements from being hidden
     
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     
