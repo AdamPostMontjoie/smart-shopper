@@ -27,7 +27,8 @@ def get_recipes_from_db(protein, calories, count:int):
                 'limit_count':count
                 }). \
                 execute()
-        print(len(recipe_response.data))
+        if recipe_response and len(recipe_response.data) > 0:
+            print(recipe_response.data[0])
         return recipe_response.data
     except Exception as e:
         print(f"Failed to get recipes: {e}")
@@ -51,7 +52,7 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f" Searching for deals: >{target_protein}g protein, <{target_cals} cals...")
 
     # A. RETRIEVE (Get facts from DB)
-    recipes = get_recipes_from_db(target_protein, target_cals,5)
+    recipes = get_recipes_from_db(target_protein, target_cals, 10)
     
     if not recipes:
         await update.message.reply_text("I couldn't find any recipes on sale matching those macros right now.")
@@ -61,10 +62,15 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # We turn the database rows into a text block for the LLM
     context_str = ""
     for r in recipes:
+        sale_details = ""
+        if r['sale_details']:
+            sales_info = "\n          Specific Deals:"
+            for deal in r['sale_details']:
+                sales_info += f"\n           - {deal['deal_name']} (${deal['price']})"
         context_str += f"""
         - Recipe: {r['name']}
           Macros: {r['protein_g']}g Protein, {r['calories']} Calories
-          On Sale: {r['ingredients_on_sale']} out of {r['total_ingredients']} ingredients are on sale!
+          On Sale: {r['ingredients_on_sale']} out of {r['total_ingredients']} ingredients are on sale! {sales_info}
           Instructions (Brief): {r['instructions'][:200]}...
         """
 
@@ -76,9 +82,12 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     {context_str}
     
     Rules:
-    1. Be enthusiastic about the savings.
-    2. Explicitly mention the protein/calorie counts from the data.
-    3. Do not make up recipes not in the list.
+    1. Explicitly mention the protein/calorie counts, but do not mention the targets the user sets
+    2. Do not make up recipes not in the list.
+    3. List every recipe in its own paragraph, do not reference other recipes within this paragraph
+    4. List ingredients on sale in bullet points
+    5. List ingredients required in bullet points
+    6. Shorten numbers to the hundredths place
     """
 
     # C. GENERATE (Call LLM)

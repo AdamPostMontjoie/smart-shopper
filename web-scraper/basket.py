@@ -166,7 +166,7 @@ def upload_new_deals(inventory):
         #closest ingredient to deal
         closest_index = np.argmin(distances[i])
         score = 1 - distances[i][closest_index]
-        if score > 0.60:
+        if score > 0.65:
             item['ingredient_id'] = db_ids[closest_index]
             item['embedding'] = deal_embeddings[i].tolist() # Store vector too
             matches_found += 1
