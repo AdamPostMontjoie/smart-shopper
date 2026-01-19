@@ -157,18 +157,33 @@ def upload_new_deals(inventory):
     distances = cdist(deal_embeddings, db_embeddings, metric='cosine')
     matches_found = 0
 
+    scores_over_7 = 0;
+    scores_over_6 = 0;
+    scores_over_5 = 0
+    scores_under_5 = 0
     for i, item in enumerate(inventory):
         item['embedding'] = deal_embeddings[i].tolist()
         #closest ingredient to deal
         closest_index = np.argmin(distances[i])
         score = 1 - distances[i][closest_index]
-        if score > 0.70:
+        if score > 0.60:
             item['ingredient_id'] = db_ids[closest_index]
             item['embedding'] = deal_embeddings[i].tolist() # Store vector too
             matches_found += 1
+            scores_over_7+=1
         else:
             item['ingredient_id'] = None
             item['embedding'] = deal_embeddings[i].tolist()
+        if score <= .7 and score > .6:
+            scores_over_6+=1
+        if score <= .6 and score > .5:
+            scores_over_5 +=1
+        if score <= .5:
+            scores_under_5 +=1
+    print(f"we have {scores_over_7} over 7")
+    print(f"we have {scores_over_6} over 6")
+    print(f"we have {scores_over_5} over 5")
+    print(f"we have {scores_under_5} under 5")
     for item in inventory:
         clean_item = {}
         for key,value in item.items():

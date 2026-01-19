@@ -17,15 +17,17 @@ supabase: Client = create_client(url, key)
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 def get_recipes_from_db(protein, calories, count:int):
+    print("attempting to grab recipes")
     try:
         recipe_response = supabase. \
             rpc('recommend_recipes',
                 {'min_protein_g':protein,
                 'max_calories':calories,
-                'min_match_percent':.50,
+                'min_match_percent':.20,
                 'limit_count':count
                 }). \
                 execute()
+        print(len(recipe_response.data))
         return recipe_response.data
     except Exception as e:
         print(f"Failed to get recipes: {e}")
@@ -85,7 +87,7 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_text}
         ],
-        model="llama3-70b-8192", # Fast and smart
+        model="llama-3.3-70b-versatile", 
     )
 
     ai_reply = chat_completion.choices[0].message.content
