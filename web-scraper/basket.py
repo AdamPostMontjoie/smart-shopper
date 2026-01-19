@@ -7,9 +7,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
+from scipy.spatial.distance import cdist
 import time
 import os
 import re
+import numpy as np
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -125,18 +127,37 @@ def get_dynamic_schedule():
         driver.quit()
         upload_new_deals(master_inventory)
 def upload_new_deals(inventory):
+    #match to unique ingredients
+    ing_response = supabase.table('unique_ingredients').select('id','name','embedding').execute()
+    ingredients = ing_response.data
+
+    db_ids = [item['id'] for item in ingredients]
+    # Convert string list to numpy array if needed, or just list of lists
+    db_embeddings = np.array([item['embedding'] for item in ingredients])
+
     #wipe all old deals, irrelevant
     cleaned_inventory = []
 
     #vectorize deals for matching
     deal_names = [item['name'] for item in inventory]
-    if deal_names:
-        embeddings = model.encode(deal_names)
-        
-        # Inject embeddings back into the dictionary
-        for i, item in enumerate(inventory):
-            item['embedding'] = embeddings[i].tolist()
+    
+    deal_embeddings = model.encode(deal_names)
+    # Inject embeddings back into the dictionary
+    distances = cdist(deal_embeddings, db_embeddings, metric='cosine')
+    matches_found = 0
 
+    for i, item in enumerate(inventory):
+        item['embedding'] = deal_embeddings[i].tolist()
+        #closest ingredient to deal
+        closest_index = np.argmin(distances[i])
+        score = 1 - distances[i][closest_index]
+        if score > 0.80:
+            item['ingredient_id'] = db_ids[closest_index]
+            item['embedding'] = deal_embeddings[i].tolist() # Store vector too
+            matches_found += 1
+        else:
+            item['ingredient_id'] = None
+            item['embedding'] = deal_embeddings[i].tolist()
     for item in inventory:
         clean_item = {}
         for key,value in item.items():
