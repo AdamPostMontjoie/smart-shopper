@@ -7,3 +7,4 @@ requests
 sentence_transformers
 numpy
 scipy
+json

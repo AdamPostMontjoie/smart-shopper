@@ -12,6 +12,7 @@ import time
 import os
 import re
 import numpy as np
+import json
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -133,7 +134,16 @@ def upload_new_deals(inventory):
 
     db_ids = [item['id'] for item in ingredients]
     # Convert string list to numpy array if needed, or just list of lists
-    db_embeddings = np.array([item['embedding'] for item in ingredients])
+    clean_embeddings = []
+    for item in ingredients:
+        emb = item['embedding']
+        if isinstance(emb, str):
+            clean_embeddings.append(json.loads(emb))
+        else:
+            clean_embeddings.append(emb)
+    
+    # Now this will correctly form a (N, 384) Matrix
+    db_embeddings = np.array(clean_embeddings)
 
     #wipe all old deals, irrelevant
     cleaned_inventory = []
@@ -143,6 +153,7 @@ def upload_new_deals(inventory):
     
     deal_embeddings = model.encode(deal_names)
     # Inject embeddings back into the dictionary
+
     distances = cdist(deal_embeddings, db_embeddings, metric='cosine')
     matches_found = 0
 

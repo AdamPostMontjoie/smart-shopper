@@ -16,14 +16,14 @@ key = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-def get_recipes_from_db(protein, calories, count):
+def get_recipes_from_db(protein, calories, count:int):
     try:
         recipe_response = supabase. \
             rpc('recommend_recipes',
                 {'min_protein_g':protein,
                 'max_calories':calories,
                 'min_match_percent':.50,
-                'limit_count':5
+                'limit_count':count
                 }). \
                 execute()
         return recipe_response.data
@@ -46,10 +46,10 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if val < 100: target_protein = val # Assume small number is protein
             else: target_cals = val           # Assume big number is calories
     
-    await update.message.reply_text(f"🔍 Searching for deals: >{target_protein}g protein, <{target_cals} cals...")
+    await update.message.reply_text(f" Searching for deals: >{target_protein}g protein, <{target_cals} cals...")
 
     # A. RETRIEVE (Get facts from DB)
-    recipes = get_recipes_from_db(target_protein, target_cals)
+    recipes = get_recipes_from_db(target_protein, target_cals,5)
     
     if not recipes:
         await update.message.reply_text("I couldn't find any recipes on sale matching those macros right now.")
