@@ -5,3 +5,5 @@ requests
 sentence_transformers
 pandas
 datasets
+scipy
+numpy
