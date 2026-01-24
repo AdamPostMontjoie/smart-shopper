@@ -150,7 +150,6 @@ def upload_new_deals(inventory):
     deal_embeddings = model.encode(deal_names)
     cleaned_inventory = []
 
-    matches_found = 0
     for i, deal_item in enumerate(inventory):
         current_deal_vector = deal_embeddings[i]
         
@@ -172,9 +171,9 @@ def upload_new_deals(inventory):
             score = 1 - distances[closest_index]       # Convert distance (0 to 1) to Similarity (0% to 100%)
             
     
-            if score > 0.65:
+            if score > 0.60:
                 best_match_id = candidate_ids[closest_index]
-                matches_found += 1
+            
 
         # Save the results back to the item
         deal_item['ingredient_id'] = best_match_id

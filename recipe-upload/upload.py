@@ -168,7 +168,7 @@ for i in range(0, total_rows, recipe_batch_size):
         })
     
     try:
-        res = safe_execute(supabase.table('recipes').insert(recipes_to_insert))
+        res = safe_execute(supabase.table('recipes').upsert(recipes_to_insert))
         inserted_recipes = res.data
         junctions_to_insert = []
         

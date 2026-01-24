@@ -24,7 +24,7 @@ def get_recipes_from_db(protein, calories, count:int):
                 {'min_protein_g':protein,
                 'max_calories':calories,
                 'min_match_percent':.20,
-                'limit_count':count
+                'limit_count': 5
                 }). \
                 execute()
         if recipe_response and len(recipe_response.data) > 0:
