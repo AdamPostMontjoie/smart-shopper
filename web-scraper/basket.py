@@ -129,68 +129,64 @@ def get_dynamic_schedule():
         upload_new_deals(master_inventory)
 def upload_new_deals(inventory):
     #match to unique ingredients
-    ing_response = supabase.table('unique_ingredients').select('id','name','embedding').execute()
+    ing_response = supabase.table('unique_ingredients').select('id','name','embedding','category').execute()
     ingredients = ing_response.data
 
-    db_ids = [item['id'] for item in ingredients]
-    # Convert string list to numpy array if needed, or just list of lists
-    clean_embeddings = []
+    categorized_ingredients = {}
     for item in ingredients:
-        emb = item['embedding']
-        if isinstance(emb, str):
-            clean_embeddings.append(json.loads(emb))
-        else:
-            clean_embeddings.append(emb)
+        if isinstance(item['embedding'],str):
+            item['embedding'] = json.loads(item['embedding'])
+        cat = item.get('category')
+        
+        if cat not in categorized_ingredients:
+            categorized_ingredients[cat] = []
+        
+        # Add the ingredient to the correct list
+        categorized_ingredients[cat].append(item)
+    db_ids = [item['id'] for item in ingredients]
     
-    # Now this will correctly form a (N, 384) Matrix
-    db_embeddings = np.array(clean_embeddings)
-
-    #wipe all old deals, irrelevant
+    
+    deal_names = [item['name'] for item in inventory]
+    deal_embeddings = model.encode(deal_names)
     cleaned_inventory = []
 
-    #vectorize deals for matching
-    deal_names = [item['name'] for item in inventory]
+    for i, deal_item in enumerate(inventory):
+        current_deal_vector = deal_embeddings[i]
+        
+        deal_cat = deal_item['category']
+        
+        best_match_id = None
+
+        if deal_cat in categorized_ingredients:
+            
+            candidates = categorized_ingredients[deal_cat]
+            
+            candidate_vectors = [c['embedding'] for c in candidates]
+            candidate_ids = [c['id'] for c in candidates]
+            
+            
+            distances = cdist([current_deal_vector], candidate_vectors, metric='cosine')[0]
+            
+            closest_index = np.argmin(distances)       # Index of the lowest distance
+            score = 1 - distances[closest_index]       # Convert distance (0 to 1) to Similarity (0% to 100%)
+            
     
-    deal_embeddings = model.encode(deal_names)
-    # Inject embeddings back into the dictionary
+            if score > 0.60:
+                best_match_id = candidate_ids[closest_index]
+            
 
-    distances = cdist(deal_embeddings, db_embeddings, metric='cosine')
-    matches_found = 0
+        # Save the results back to the item
+        deal_item['ingredient_id'] = best_match_id
+        deal_item['embedding'] = current_deal_vector.tolist() # Need to save as list for JSON
 
-    scores_over_7 = 0;
-    scores_over_6 = 0;
-    scores_over_5 = 0
-    scores_under_5 = 0
-    for i, item in enumerate(inventory):
-        item['embedding'] = deal_embeddings[i].tolist()
-        #closest ingredient to deal
-        closest_index = np.argmin(distances[i])
-        score = 1 - distances[i][closest_index]
-        if score > 0.65:
-            item['ingredient_id'] = db_ids[closest_index]
-            item['embedding'] = deal_embeddings[i].tolist() # Store vector too
-            matches_found += 1
-            scores_over_7+=1
-        else:
-            item['ingredient_id'] = None
-            item['embedding'] = deal_embeddings[i].tolist()
-        if score <= .7 and score > .6:
-            scores_over_6+=1
-        if score <= .6 and score > .5:
-            scores_over_5 +=1
-        if score <= .5:
-            scores_under_5 +=1
-    print(f"we have {scores_over_7} over 7")
-    print(f"we have {scores_over_6} over 6")
-    print(f"we have {scores_over_5} over 5")
-    print(f"we have {scores_under_5} under 5")
-    for item in inventory:
+        # Cleaning step (Removing N/A, empty strings)
         clean_item = {}
-        for key,value in item.items():
+        for key, value in deal_item.items():
             if isinstance(value, str) and value.strip() in ["", "N/A", "No Deal"]:
                 clean_item[key] = None
             else:
                 clean_item[key] = value
+        
         cleaned_inventory.append(clean_item)
     try:
         supabase.table('deals').delete().neq("id",-1).execute()
