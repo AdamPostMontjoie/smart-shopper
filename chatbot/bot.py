@@ -48,13 +48,17 @@ class ShopperState(TypedDict):
 
 
 
-# structured llm call for profile
+# structured llm calls
 class UpdatePreferences(BaseModel):
     new_dislikes: List[str] = Field(description="List of ingredients the user dislikes")
 class UserIntent(BaseModel):
     intent: Literal["recipe", "profile", "other"] = Field(
         description="Classify the user's main goal. 'recipe' if they want food suggestions. 'profile' if they are ONLY updating preferences by stating dislikes/food they can't eat. 'other' for greeting/help."
-    )
+)
+class FilterResult(BaseModel):
+    safe_indices: List[int] = Field(
+    description="The indices (0-based) of the recipes that are SAFE to eat (do NOT contain disliked ingredients)."
+)
 
 #extract any dislikes for filtering
 def profile_node(state:ShopperState):
@@ -105,7 +109,8 @@ def database_node(state:ShopperState):
                 {'min_protein_g':protein,
                 'max_calories':calories,
                 'min_match_percent':.20,
-                'limit_count': 50
+                'limit_count': 50,
+                'offset_val':offset
                 }). \
                 execute()
         return {
@@ -117,17 +122,53 @@ def database_node(state:ShopperState):
         return {"recipes":[]}
 #here i filter to make sure the recipes don't contain disliked ingredients
 #greater filtering will be added if too many recipes pass first filter test
-def filter_node(state:ShopperState):
-    valid_recipes = []
-    for recipe in state['recipes']:
-        ingredients = [deal['deal_name'].lower() for deal in recipe['sale_details']]
-        if not any(bad in ingredients for bad in state['dislikes']):
-            valid_recipes.append(recipe)
-    return {"recipes":valid_recipes}
+def filter_node(state: ShopperState):
+    recipes = state.get('recipes', [])
+    dislikes = state.get('dislikes', [])
+    
+    # skip llm call if no dislikes
+    if not dislikes or not recipes:
+        return {"recipes": recipes}
+
+    #create numbered list
+    batch_text = ""
+    for i, r in enumerate(recipes):
+        # Extract ingredient names from the sale details
+        ing_list = [deal['deal_name'] for deal in r.get('sale_details', [])]
+        batch_text += f"ID {i}: {r['name']} | Contains: {', '.join(ing_list)}\n"
+        
+    print(f"Filtering {len(recipes)} recipes against: {dislikes}")
+    system_prompt = f"""
+    You are a strict dietary safety filter.
+    User Dislikes: {', '.join(dislikes)}
+    
+    Analyze the provided recipes. Return the INDICES of the recipes that are SAFE.
+    
+    Rules:
+    1. If a recipe contains a disliked ingredient (even a derivative, e.g., 'cream' when user hates 'milk'), OMIT the index.
+    2. If unsure, err on the side of caution and OMIT the index.
+    3. Return ONLY the list of integers.
+    """
+    
+    try:
+        response = llm.with_structured_output(FilterResult).invoke([
+            ("system", system_prompt),
+            ("human", batch_text)
+        ])
+        
+        valid_recipes = [recipes[i] for i in response.safe_indices if i < len(recipes)]
+        print(f"Filter removed {len(recipes) - len(valid_recipes)} recipes.")
+        return {"recipes": valid_recipes}
+
+    except Exception as e:
+        print(f"Filter Error: {e}. Returning original list.")
+        return {"recipes": recipes}
 
 #"if less than 3 recipes remain after filtering, go back to db node and get next 50"
 def filtered_conditional(state:ShopperState):
     recipes = state['recipes']
+    if len(recipes) == 0:
+        return "final_recipes_node"
     if len(recipes) <3:
         return "database_node"
     else:
@@ -138,8 +179,13 @@ def final_recipes_node(state:ShopperState):
     recipes = state['recipes'][:5] # Limit to 5 responses
     output_text = "Here are your recipes:\n"
     for r in recipes:
-        output_text += f"- {r['name']} ({r['protein_g']}g protein)\n"
-    
+        output_text += f"- {r['name']} ({round(r['protein_g'])}g protein)\n"
+    output_text+="\n Your shopping list this week \n"
+    for r in recipes:
+        output_text += f"{r['name']} \n"
+        for index, deal in enumerate(r["sale_details"]):
+            output_text += f"{index + 1}. {deal["deal_name"]}(${deal['price']}) \n"
+        
     return {"final_response": output_text}
 
 
@@ -170,7 +216,8 @@ async def telegram_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Received: {user_text}")
     try:
         response = supabase.table("user_preferences").select("dislikes").eq("user_id", user_id).execute()
-        existing_dislikes = response.data[0]['dislikes'] if response.data else []
+        raw_dislikes = response.data[0]['dislikes'] if response.data else []
+        existing_dislikes = list(set([d for d in raw_dislikes if d and d.strip()]))
     except Exception as e:
         print(f"Memory Fetch Error: {e}")
         existing_dislikes = []
@@ -188,6 +235,7 @@ async def telegram_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # 2. Run the Graph (Invoke)
     # This runs the whole flow we just built
+
     final_state = await app_graph.ainvoke(initial_state)
     
     # 3. Send the Result
