@@ -59,6 +59,13 @@ class FilterResult(BaseModel):
     safe_indices: List[int] = Field(
     description="The indices (0-based) of the recipes that are SAFE to eat (do NOT contain disliked ingredients)."
 )
+    
+class PrettyResponse(BaseModel):
+    recipeText: str = Field(
+        description="A pretty list of recipes and ingredients to shop for"
+    )
+
+
 
 #extract any dislikes for filtering
 def profile_node(state:ShopperState):
@@ -177,16 +184,14 @@ def filtered_conditional(state:ShopperState):
 #return final list in chat format
 def final_recipes_node(state:ShopperState):
     recipes = state['recipes'][:5] # Limit to 5 responses
-    output_text = "Here are your recipes:\n"
-    for r in recipes:
-        output_text += f"- {r['name']} ({round(r['protein_g'])}g protein)\n"
-    output_text+="\n Your shopping list this week \n"
-    for r in recipes:
-        output_text += f"{r['name']} \n"
-        for index, deal in enumerate(r["sale_details"]):
-            output_text += f"{index + 1}. {deal["deal_name"]}(${deal['price']}) \n"
+    #Distinguish clearly between 'On Sale' items and 'Regular Price' items. (include when available)
+    system_prompt = "You are a helpful shopping assistant. Present these meal options nicely. Group the shopping list by category if possible. "
+    response = llm.with_structured_output(PrettyResponse).invoke([
+        ("system",system_prompt),
+        ("human",recipes)
+    ])
         
-    return {"final_response": output_text}
+    return {"final_response": response}
 
 
 
@@ -209,9 +214,46 @@ shopping_builder.add_edge("final_recipes_node",END)
 
 app_graph = shopping_builder.compile()
 
+async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    first_name = update.message.from_user.first_name
+    
+    print(f"Start command received from {user_id}")
+    try:
+        # Check if user already exists in DB
+        response = supabase.table("user_preferences").select("user_id").eq("user_id", user_id).execute()
+        
+        # If no data returned, they are NEW
+        if not response.data:
+            welcome_message = (
+                f"👋 Hi {first_name}! I'm your Smart Shopper Agent.\n\n"
+                "I help you find high-protein recipes using ingredients currently on sale.\n\n"
+                "**How to use me:**\n"
+                "1. Tell me what you love: 'I love chicken!' \n"
+                "2. Tell me what you hate: 'I hate mushrooms and cilantro'\n"
+                "3. Ask for food: 'Give me chicken recipes'\n\n"
+                "Let's get started! What are you looking for?"
+            )
+            
+            # SAVE them to DB
+            supabase.table("user_preferences").insert({
+                "user_id": user_id, 
+                "dislikes": []
+            }).execute()
+            
+            await update.message.reply_text(welcome_message)
+            
+        else:
+            await update.message.reply_text(f"Welcome back, {first_name}! Ready to cook?")
+            
+    except Exception as e:
+        print(f"Start Handler Error: {e}")
+        # Fallback in case DB fails
+        await update.message.reply_text("👋 Hello! Ask me for recipes.")
+
 async def telegram_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
-    chat_id = update.message.chat_id
+    #chat_id = update.message.chat_id
     user_id = update.message.from_user.id
     print(f"Received: {user_text}")
     try:
@@ -253,6 +295,7 @@ async def telegram_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- RUN ---
 if __name__ == '__main__':
     app = ApplicationBuilder().token(os.getenv("TELEGRAM_BOT_TOKEN")).build()
+    app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), telegram_handler))
     print("Bot is polling...")
     app.run_polling()
