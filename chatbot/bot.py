@@ -42,6 +42,7 @@ class ShopperState(TypedDict):
     user_text:str #can change later to list once longer conversations
     user_intent:str
     recipes: List[Recipe]
+    matched_recipes:Annotated[list,operator.add]
     dislikes:Annotated[list,operator.add]
     supabase_offset:int #for scrolling if first 50 don't work out
     final_response:str
@@ -61,7 +62,7 @@ class FilterResult(BaseModel):
 )
     
 class PrettyResponse(BaseModel):
-    recipeText: str = Field(
+    recipe_text: str = Field(
         description="A pretty list of recipes and ingredients to shop for"
     )
 
@@ -135,7 +136,7 @@ def filter_node(state: ShopperState):
     
     # skip llm call if no dislikes
     if not dislikes or not recipes:
-        return {"recipes": recipes}
+        return {"matched_recipes": recipes}
 
     #create numbered list
     batch_text = ""
@@ -165,7 +166,7 @@ def filter_node(state: ShopperState):
         
         valid_recipes = [recipes[i] for i in response.safe_indices if i < len(recipes)]
         print(f"Filter removed {len(recipes) - len(valid_recipes)} recipes.")
-        return {"recipes": valid_recipes}
+        return {"matched_recipes": valid_recipes}
 
     except Exception as e:
         print(f"Filter Error: {e}. Returning original list.")
@@ -173,25 +174,24 @@ def filter_node(state: ShopperState):
 
 #"if less than 3 recipes remain after filtering, go back to db node and get next 50"
 def filtered_conditional(state:ShopperState):
-    recipes = state['recipes']
-    if len(recipes) == 0:
-        return "final_recipes_node"
-    if len(recipes) <3:
+    recipes = state['matched_recipes']
+    
+    if len(recipes) <=3 or state['supabase_offset'] <= 250:
         return "database_node"
     else:
         return "final_recipes_node"
     
 #return final list in chat format
 def final_recipes_node(state:ShopperState):
-    recipes = state['recipes'][:5] # Limit to 5 responses
+    matched_recipes = state['matched_recipes'][:5] # Limit to 5 responses
     #Distinguish clearly between 'On Sale' items and 'Regular Price' items. (include when available)
     system_prompt = "You are a helpful shopping assistant. Present these meal options nicely. Ensure the recipe names are generic while still being accurate. Group the shopping list by category if possible. "
     response = llm.with_structured_output(PrettyResponse).invoke([
         ("system",system_prompt),
-        ("human",recipes)
+        ("human",str(matched_recipes))
     ])
         
-    return {"final_response": response}
+    return {"final_response": response.recipe_text}
 
 
 
@@ -270,6 +270,7 @@ async def telegram_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "user_text": user_text,
         "user_intent": "",
         "recipes": [],
+        "matched_recipes": [],
         "dislikes": existing_dislikes, 
         "supabase_offset": 0,
         "final_response": ""
