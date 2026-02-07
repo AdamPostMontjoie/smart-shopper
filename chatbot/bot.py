@@ -185,7 +185,7 @@ def filtered_conditional(state:ShopperState):
 def final_recipes_node(state:ShopperState):
     recipes = state['recipes'][:5] # Limit to 5 responses
     #Distinguish clearly between 'On Sale' items and 'Regular Price' items. (include when available)
-    system_prompt = "You are a helpful shopping assistant. Present these meal options nicely. Group the shopping list by category if possible. "
+    system_prompt = "You are a helpful shopping assistant. Present these meal options nicely. Ensure the recipe names are generic while still being accurate. Group the shopping list by category if possible. "
     response = llm.with_structured_output(PrettyResponse).invoke([
         ("system",system_prompt),
         ("human",recipes)
