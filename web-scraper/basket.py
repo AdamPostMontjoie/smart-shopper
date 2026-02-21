@@ -28,11 +28,12 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 def get_dynamic_schedule():
     options = webdriver.ChromeOptions()
     
-    #options.add_argument('--headless=new') # Use the new headless mode (more stable)
+    options.add_argument('--headless') # Use the new headless mode (more stable)
     options.add_argument('--no-sandbox') # Bypass OS security model (required for Docker/CI)
     options.add_argument('--disable-dev-shm-usage') # Overcome limited resource problems
     options.add_argument('--disable-gpu') # Applicable to windows os only but good practice
     options.add_argument('--window-size=1920,1080') # Prevent elements from being hidden
+    options.add_argument('--remote-debugging-port=9222')
     
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     
@@ -101,9 +102,6 @@ def get_dynamic_schedule():
                             price = str(float(parts[1]) / float(parts[0]))
                         else:
                             raise ValueError(f"Bad 'for' price format: {price}")
-
-                    
-
                     price = re.sub(r"[^0-9.]", "", price)
                     discount_div = item.find('div', class_="circle-deal")
                     discount = discount_div.find('p',class_='ng-binding').get_text(strip=True)
