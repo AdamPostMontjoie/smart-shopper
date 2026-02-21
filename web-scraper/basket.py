@@ -28,7 +28,7 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 def get_dynamic_schedule():
     options = webdriver.ChromeOptions()
     
-    options.add_argument('--headless=new') # Use the new headless mode (more stable)
+    #options.add_argument('--headless=new') # Use the new headless mode (more stable)
     options.add_argument('--no-sandbox') # Bypass OS security model (required for Docker/CI)
     options.add_argument('--disable-dev-shm-usage') # Overcome limited resource problems
     options.add_argument('--disable-gpu') # Applicable to windows os only but good practice
@@ -43,6 +43,7 @@ def get_dynamic_schedule():
         WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.ID, "flyer_main"))
         )
+        time.sleep(5)
         select_temp = Select(driver.find_element(By.ID, "ddlDepartments"))
         dept_options = [opt.text for opt in select_temp.options 
                     if "Loading" not in opt.text and "Featured" not in opt.text]
@@ -188,7 +189,11 @@ def upload_new_deals(inventory):
                 clean_item[key] = value
         
         cleaned_inventory.append(clean_item)
+    if len(cleaned_inventory) == 0:
+        print("No deals matched or scraped. Aborting without removing existing deals")
+        return
     try:
+        #delete previous deals
         supabase.table('deals').delete().neq("id",-1).execute()
         #upload deals
         try:
